@@ -60,11 +60,15 @@ def main():
             print("Ошибка: укажите путь к видео файлу --video")
             return
 
+        if not Path(args.video).exists():
+            print(f"Видео не найдено: {args.video}")
+            return
+
         if not Path(args.model).exists():
             print(f"Модель не найдена: {args.model}")
             return
 
-        print("Запуск детекции...")
+        print("Запуск детекции с трекингом...")
         detector = GunPersonDetector(args.model)
         video_name = Path(args.video).stem
         output_path = f"outputs/{video_name}_detected.mp4"
