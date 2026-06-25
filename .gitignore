@@ -12,7 +12,7 @@ env/
 .vscode/
 .idea/
 
-# Images  =5 703@C605< =0 GitHub
+# Images
 *.png
 *.jpg
 *.jpeg
@@ -20,20 +20,21 @@ env/
 *.webp
 *.bmp
 
-# 845>  B>;L:> @57C;LB0B 45B5:F88
+# Video — only detection result
 video/
 *.mp4
 !outputs/
 !outputs/detected_detected.mp4
 
-# 0B0A5B (1>;LH>9 >1JQ<)
+# Dataset
 data/images/
 data/labels/
+data/*.txt
 
-# 5A0 <>45;8
+# Model weights
 models/*.pt
 
-# @0D8:8 >1CG5=8O (;>:0;L=> 2 docs/training/)
+# Training plots
 docs/training/
 
 # Ultralytics / training artifacts
@@ -43,6 +44,3 @@ yolov8*.pt
 # OS
 .DS_Store
 Thumbs.db
-
-# !;CG09=K5 B5:AB>2K5 D09;K 2 data/
-data/*.txt
