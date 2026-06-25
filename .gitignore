@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# IDE
+.vscode/
+.idea/
+
+# Images  =5 703@C605< =0 GitHub
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.bmp
+
+# 845>  B>;L:> @57C;LB0B 45B5:F88
+video/
+*.mp4
+!outputs/
+!outputs/detected_detected.mp4
+
+# 0B0A5B (1>;LH>9 >1JQ<)
+data/images/
+data/labels/
+
+# 5A0 <>45;8
+models/*.pt
+
+# @0D8:8 >1CG5=8O (;>:0;L=> 2 docs/training/)
+docs/training/
+
+# Ultralytics / training artifacts
+runs/
+yolov8*.pt
+
+# OS
+.DS_Store
+Thumbs.db
+
+# !;CG09=K5 B5:AB>2K5 D09;K 2 data/
+data/*.txt
