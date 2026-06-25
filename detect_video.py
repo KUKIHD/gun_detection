@@ -3,22 +3,43 @@ import time
 from pathlib import Path
 
 import cv2
+import numpy as np
 from ultralytics import YOLO
 
 
 class GunPersonDetector:
-    def __init__(self, model_path="models/best.pt"):
+    def __init__(self, model_path="models/best.pt", tracker="bytetrack.yaml"):
         print(f"Загрузка модели: {model_path}")
         self.model = YOLO(model_path)
+        self.tracker = tracker
         self.colors = {
             "gun": (0, 0, 255),
             "person": (0, 255, 0),
         }
         self.confidence_threshold = 0.5
-        print("Модель загружена успешно")
+        self._track_colors = {}
+        print("Модель загружена успешно (трекинг: ByteTrack)")
 
-    def process_frame(self, frame):
-        results = self.model(frame, conf=self.confidence_threshold, verbose=False)
+    def _track_color(self, track_id):
+        if track_id not in self._track_colors:
+            hue = (track_id * 47) % 180
+            hsv = np.uint8([[[hue, 200, 255]]])
+            bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0][0]
+            self._track_colors[track_id] = tuple(int(c) for c in bgr)
+        return self._track_colors[track_id]
+
+    def process_frame(self, frame, track=True):
+        if track:
+            results = self.model.track(
+                frame,
+                conf=self.confidence_threshold,
+                persist=True,
+                tracker=self.tracker,
+                verbose=False,
+            )
+        else:
+            results = self.model(frame, conf=self.confidence_threshold, verbose=False)
+
         detections = []
         processed_frame = frame.copy()
 
@@ -32,16 +53,22 @@ class GunPersonDetector:
                 cls_id = int(box.cls[0])
                 confidence = float(box.conf[0])
                 class_name = self.model.names[cls_id]
+                track_id = int(box.id[0]) if box.id is not None else None
 
                 detections.append(
                     {
                         "class": class_name,
                         "confidence": confidence,
                         "bbox": [x1, y1, x2, y2],
+                        "track_id": track_id,
                     }
                 )
 
-                color = self.colors.get(class_name, (255, 255, 255))
+                if track_id is not None:
+                    color = self._track_color(track_id)
+                else:
+                    color = self.colors.get(class_name, (255, 255, 255))
+
                 cv2.rectangle(
                     processed_frame,
                     (int(x1), int(y1)),
@@ -50,7 +77,11 @@ class GunPersonDetector:
                     2,
                 )
 
-                label = f"{class_name}: {confidence:.2f}"
+                if track_id is not None:
+                    label = f"{class_name} #{track_id}: {confidence:.2f}"
+                else:
+                    label = f"{class_name}: {confidence:.2f}"
+
                 (text_width, text_height), _ = cv2.getTextSize(
                     label, cv2.FONT_HERSHEY_SIMPLEX, 0.5, 2
                 )
@@ -73,8 +104,10 @@ class GunPersonDetector:
 
         return processed_frame, detections
 
-    def process_video(self, video_path, output_path=None, show=False):
+    def process_video(self, video_path, output_path=None, show=False, track=True):
         print(f"Обработка видео: {video_path}")
+        if track:
+            print("Режим: детекция + трекинг (ByteTrack)")
 
         cap = cv2.VideoCapture(str(video_path))
         if not cap.isOpened():
@@ -91,11 +124,15 @@ class GunPersonDetector:
             Path(output_path).parent.mkdir(parents=True, exist_ok=True)
             fourcc = cv2.VideoWriter_fourcc(*"mp4v")
             out = cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
+            if not out.isOpened():
+                print(f"Не удалось создать выходной файл: {output_path}")
+                cap.release()
+                return
 
         frame_count = 0
         start_time = time.time()
-        gun_detections = 0
-        person_detections = 0
+        gun_track_ids = set()
+        person_track_ids = set()
 
         print("Начинаю обработку видео...")
         if show:
@@ -106,16 +143,24 @@ class GunPersonDetector:
             if not ret:
                 break
 
-            processed_frame, detections = self.process_frame(frame)
+            processed_frame, detections = self.process_frame(frame, track=track)
 
+            active_guns = 0
+            active_persons = 0
             for detection in detections:
+                track_id = detection.get("track_id")
                 if detection["class"] == "gun":
-                    gun_detections += 1
+                    active_guns += 1
+                    if track_id is not None:
+                        gun_track_ids.add(track_id)
                 elif detection["class"] == "person":
-                    person_detections += 1
+                    active_persons += 1
+                    if track_id is not None:
+                        person_track_ids.add(track_id)
 
             stats_text = (
-                f"Guns: {gun_detections} | Persons: {person_detections} | "
+                f"Guns: {active_guns} ({len(gun_track_ids)} tracks) | "
+                f"Persons: {active_persons} ({len(person_track_ids)} tracks) | "
                 f"Frame: {frame_count}"
             )
             cv2.putText(
@@ -132,7 +177,7 @@ class GunPersonDetector:
                 out.write(processed_frame)
 
             if show:
-                cv2.imshow("Gun & Person Detection", processed_frame)
+                cv2.imshow("Gun & Person Detection + Tracking", processed_frame)
                 if cv2.waitKey(1) & 0xFF == ord("q"):
                     print("Остановлено пользователем")
                     break
@@ -153,8 +198,8 @@ class GunPersonDetector:
         print(f"   Всего кадров: {frame_count}")
         print(f"   Общее время: {total_time:.2f} секунд")
         print(f"   Средний FPS: {avg_fps:.1f}")
-        print(f"   Обнаружено оружия: {gun_detections}")
-        print(f"   Обнаружено людей: {person_detections}")
+        print(f"   Уникальных треков gun: {len(gun_track_ids)}")
+        print(f"   Уникальных треков person: {len(person_track_ids)}")
         print("=" * 50)
 
         cap.release()
@@ -166,7 +211,7 @@ class GunPersonDetector:
             print(f"Результат сохранен: {output_path}")
 
     def process_realtime(self, camera_id=0):
-        print(f"Запуск детекции с камеры {camera_id}...")
+        print(f"Запуск детекции с трекингом с камеры {camera_id}...")
         cap = cv2.VideoCapture(camera_id)
         if not cap.isOpened():
             print(f"Не удалось открыть камеру: {camera_id}")
@@ -179,8 +224,8 @@ class GunPersonDetector:
             if not ret:
                 break
 
-            processed_frame, _ = self.process_frame(frame)
-            cv2.imshow("Gun & Person Detection (Realtime)", processed_frame)
+            processed_frame, _ = self.process_frame(frame, track=True)
+            cv2.imshow("Gun & Person Detection + Tracking (Realtime)", processed_frame)
 
             if cv2.waitKey(1) & 0xFF == ord("q"):
                 break
@@ -190,7 +235,7 @@ class GunPersonDetector:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Детекция людей и оружия на видео")
+    parser = argparse.ArgumentParser(description="Детекция и трекинг людей и оружия на видео")
     parser.add_argument("--video", type=str, required=True, help="Путь к входному видео")
     parser.add_argument(
         "--output",
@@ -215,6 +260,11 @@ def main():
         default=0.5,
         help="Порог уверенности",
     )
+    parser.add_argument(
+        "--no-track",
+        action="store_true",
+        help="Отключить трекинг (только детекция по кадрам)",
+    )
 
     args = parser.parse_args()
 
@@ -238,6 +288,7 @@ def main():
         video_path=args.video,
         output_path=output_path,
         show=args.show,
+        track=not args.no_track,
     )
 
 
