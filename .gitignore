@@ -12,13 +12,15 @@ env/
 .vscode/
 .idea/
 
-# Images
+# Images (except training report in docs/training/)
 *.png
 *.jpg
 *.jpeg
 *.gif
 *.webp
 *.bmp
+!docs/training/
+!docs/training/**
 
 # Video — only detection result
 video/
@@ -33,9 +35,6 @@ data/*.txt
 
 # Model weights
 models/*.pt
-
-# Training plots
-docs/training/
 
 # Ultralytics / training artifacts
 runs/
